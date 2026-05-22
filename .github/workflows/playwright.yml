@@ -1,0 +1,114 @@
+name: Playwright Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # ── Sharded test runs ────────────────────────────────────────────────────────
+  #
+  # Matrix dimensions:
+  #   environment — staging | production   (6 parallel jobs total)
+  #   shard       — 1 | 2 | 3
+  #
+  # Each job produces its own playwright-report/ and uploads it as a named
+  # artifact so every shard report is independently downloadable from the
+  # Actions UI without any post-processing step.
+  test:
+    name: "[${{ matrix.environment }}] Shard ${{ matrix.shard }}/3"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false   # keep remaining shards running even if one fails
+      matrix:
+        environment: [staging, production]
+        shard: [1, 2, 3]
+
+    # GitHub Environment — each environment holds its own BASE_URL secret under
+    # Settings → Environments → <name> → Secrets → BASE_URL.
+    # You can also gate production runs with required reviewers here.
+    environment: ${{ matrix.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run tests — shard ${{ matrix.shard }}/3
+        run: npx playwright test --shard=${{ matrix.shard }}/3
+        env:
+          CI: "true"
+          ENVIRONMENT: ${{ matrix.environment }}
+          # Resolved from the active GitHub Environment's secret, so staging and
+          # production automatically get their own BASE_URL without any branching.
+          BASE_URL: ${{ secrets.BASE_URL }}
+
+      # Upload the HTML report produced by this shard so it is immediately
+      # viewable from the Actions UI: Actions → run → Artifacts section.
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report--${{ matrix.environment }}--shard${{ matrix.shard }}
+          path: playwright-report/
+          retention-days: 30
+
+
+  # ── Slack notification on any failure ────────────────────────────────────────
+  #
+  # Prerequisite: add SLACK_WEBHOOK_URL as a repository-level secret under
+  # Settings → Secrets and variables → Actions → New repository secret.
+  # Generate the URL at https://api.slack.com/apps → your app → Incoming Webhooks.
+  notify-failure:
+    name: Slack — failure notification
+    needs: test
+    if: failure()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send Slack message
+        uses: slackapi/slack-github-action@v2
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "❌ Playwright tests failed on *${{ github.repository }}*",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": { "type": "plain_text", "text": "❌ Playwright Test Failure" }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    { "type": "mrkdwn", "text": "*Repository:*\n${{ github.repository }}" },
+                    { "type": "mrkdwn", "text": "*Branch:*\n`${{ github.ref_name }}`" },
+                    { "type": "mrkdwn", "text": "*Triggered by:*\n${{ github.actor }}" },
+                    { "type": "mrkdwn", "text": "*Commit:*\n`${{ github.sha }}`" }
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": { "type": "plain_text", "text": "View Run" },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }

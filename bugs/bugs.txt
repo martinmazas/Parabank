@@ -1,0 +1,74 @@
+================================================================================
+BUG-001: Transfer API allows overdraft — no balance validation
+================================================================================
+Severity : High
+Endpoint : POST /services/bank/transfer
+Test     : Transfer > amount exceeding balance > error response and balances unchanged
+
+Description
+-----------
+The transfer endpoint accepts amounts that exceed the source account's available
+balance. Instead of rejecting the request with a 4xx status, it returns HTTP 200
+and commits the transaction, silently driving the account into a negative balance.
+
+Steps to reproduce
+------------------
+1. Obtain an account with a known positive balance (e.g. $100).
+2. POST /services/bank/transfer?fromAccountId=<id>&toAccountId=<other>&amount=<balance * 2>
+3. Observe: HTTP 200 "Successfully transferred $<amount> from account #<id>..."
+4. GET /services/bank/accounts/<id>  →  balance is now negative.
+
+Expected behavior
+-----------------
+HTTP 400 (or 422) with an error message such as "Insufficient funds".
+Source and destination balances remain unchanged.
+
+Actual behavior
+---------------
+HTTP 200. Source balance decreases below zero; destination balance increases.
+
+Evidence (manual probe on 2026-05-20)
+--------------------------------------
+Account 13677 had balance $50.
+POST amount=$9999  →  200 OK
+GET account 13677  →  balance: -$9949
+
+
+================================================================================
+BUG-002: Transfer API accepts negative amounts — reverses money flow silently
+================================================================================
+Severity : High
+Endpoint : POST /services/bank/transfer
+Test     : Transfer > negative amount > API returns 4xx and no transaction created
+
+Description
+-----------
+The transfer endpoint does not validate that the amount is a positive number.
+Submitting a negative amount causes funds to flow in the opposite direction
+(from toAccountId → fromAccountId), bypassing any intentional authorization
+from the "destination" account holder. The server responds HTTP 200 and records
+a transaction, exposing users to unauthorized fund extraction.
+
+Steps to reproduce
+------------------
+1. Have two accounts A and B.
+2. POST /services/bank/transfer?fromAccountId=A&toAccountId=B&amount=-100
+3. Observe: HTTP 200 "Successfully transferred $-100 from account #A..."
+4. GET /services/bank/accounts/A  →  balance increased by $100.
+5. GET /services/bank/accounts/B  →  balance decreased by $100.
+
+Expected behavior
+-----------------
+HTTP 400 (or 422) with an error message such as "Amount must be positive".
+No transaction is created; balances remain unchanged.
+
+Actual behavior
+---------------
+HTTP 200. Funds flow from B → A (reverse of what the request states).
+A transaction entry is created in both accounts.
+
+Evidence (manual probe on 2026-05-20)
+--------------------------------------
+Account 13677 (from), account 13788 (to), amount=-50.
+POST  →  200 OK
+13677 balance went UP by $50; 13788 balance went DOWN by $50.
