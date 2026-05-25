@@ -46,6 +46,23 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
+      # ── Staging only: spin up the ParaBank Docker image ──────────────────────
+      #
+      # services: cannot be conditional per matrix cell, so we use a plain step
+      # guarded by `if`. The loop polls /parabank until Tomcat is fully up
+      # (typically 20-40 s) before handing off to the test step.
+      - name: Start ParaBank container (staging)
+        if: matrix.environment == 'staging'
+        run: |
+          docker run -d --name parabank -p 8080:8080 parasoft/parabank
+          echo "Waiting for ParaBank to be ready…"
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8080/parabank/index.htm && break
+            echo "  attempt $i/30 — retrying in 5 s"
+            sleep 5
+          done
+          echo "ParaBank is ready ✓"
+
       - name: Run tests — shard ${{ matrix.shard }}/3
         run: npx playwright test --shard=${{ matrix.shard }}/3
         env:
