@@ -10,8 +10,9 @@ test.use({ storageState: { cookies: [], origins: [] } });
 test.describe('Authentication', () => {
   test('Login > valid credentials land on account overview', async ({
     loginPage,
+    registeredUser
   }) => {
-    await loginPage.login(process.env.TEST_USERNAME!, process.env.TEST_PASSWORD!);
+    await loginPage.login(registeredUser.username, registeredUser.password);
     await loginPage.expectOverview();
   });
 
