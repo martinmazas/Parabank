@@ -25,10 +25,10 @@ type MyFixtures = {
   billPayPage: BillPayPage;
   loanPage: LoanPage;
   api: BaseAPI;
-  registeredUser: RegisteredUser;
 };
 
 type WorkerFixtures = {
+  registeredUser: RegisteredUser;
   workerUser: WorkerUser;
 };
 
@@ -68,35 +68,57 @@ export const test = base.extend<MyFixtures, WorkerFixtures>({
       fs.mkdirSync(AUTH_DIR, { recursive: true });
       const storageStatePath = path.join(AUTH_DIR, `worker-${workerInfo.workerIndex}.json`);
 
-      const data = buildRegistrationData();
+      let data = buildRegistrationData();
+      let customerId: number | undefined;
 
-      // Register via UI (the REST /services/bank/register endpoint returns 404)
-      const ctx = await browser.newContext({ baseURL: process.env.BASE_URL });
-      const pg = await ctx.newPage();
-      await pg.goto('register.htm');
-      await pg.locator('[id="customer.firstName"]').fill(data.firstName);
-      await pg.locator('[id="customer.lastName"]').fill(data.lastName);
-      await pg.locator('[id="customer.address.street"]').fill(data.address);
-      await pg.locator('[id="customer.address.city"]').fill(data.city);
-      await pg.locator('[id="customer.address.state"]').fill(data.state);
-      await pg.locator('[id="customer.address.zipCode"]').fill(data.zipCode);
-      await pg.locator('[id="customer.phoneNumber"]').fill(data.phoneNumber);
-      await pg.locator('[id="customer.ssn"]').fill(data.ssn);
-      await pg.locator('[id="customer.username"]').fill(data.username);
-      await pg.locator('[id="customer.password"]').fill(data.password);
-      await pg.locator('[id="repeatedPassword"]').fill(data.password);
-      await pg.getByRole('button', { name: 'Register' }).click();
-      await pg.waitForLoadState('networkidle');
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        // Register via UI (the REST /services/bank/register endpoint returns 404)
+        const ctx = await browser.newContext({ baseURL: process.env.BASE_URL });
+        const pg = await ctx.newPage();
+        await pg.goto('register.htm');
+        await pg.locator('[id="customer.firstName"]').fill(data.firstName);
+        await pg.locator('[id="customer.lastName"]').fill(data.lastName);
+        await pg.locator('[id="customer.address.street"]').fill(data.address);
+        await pg.locator('[id="customer.address.city"]').fill(data.city);
+        await pg.locator('[id="customer.address.state"]').fill(data.state);
+        await pg.locator('[id="customer.address.zipCode"]').fill(data.zipCode);
+        await pg.locator('[id="customer.phoneNumber"]').fill(data.phoneNumber);
+        await pg.locator('[id="customer.ssn"]').fill(data.ssn);
+        await pg.locator('[id="customer.username"]').fill(data.username);
+        await pg.locator('[id="customer.password"]').fill(data.password);
+        await pg.locator('[id="repeatedPassword"]').fill(data.password);
+        await pg.getByRole('button', { name: 'Register' }).click();
+        await pg.waitForLoadState('networkidle');
 
-      // Parabank auto-logs-in after registration — capture the live session now.
-      await ctx.storageState({ path: storageStatePath });
-      await ctx.close();
+        // If the username field is still visible, Parabank kept the form open — registration failed.
+        // Generate fresh credentials and retry rather than proceeding with a non-existent user.
+        const registrationFailed = await pg.locator('[id="customer.username"]').isVisible();
+        if (registrationFailed) {
+          await ctx.close();
+          data = buildRegistrationData();
+          continue;
+        }
 
-      // Resolve customerId via API
-      const apiCtx = await playwrightRequest.newContext();
-      const api = new BaseAPI(apiCtx);
-      const customerId = await login(api, data.username, data.password);
-      await apiCtx.dispose();
+        // Parabank auto-logs-in after registration — capture the live session now.
+        await ctx.storageState({ path: storageStatePath });
+        await ctx.close();
+
+        // Resolve customerId via API. Wrap in try/catch: in rare cases the DB
+        // write may not have fully committed yet, causing a 400 on immediate login.
+        try {
+          const apiCtx = await playwrightRequest.newContext();
+          const api = new BaseAPI(apiCtx);
+          customerId = await login(api, data.username, data.password);
+          await apiCtx.dispose();
+          break;
+        } catch {
+          data = buildRegistrationData();
+        }
+      }
+
+      if (customerId === undefined) {
+        throw new Error(`Worker ${workerInfo.workerIndex}: registration failed after 3 attempts`);
+      }
 
       await use({ username: data.username, password: data.password, customerId, storageStatePath });
 

@@ -8,11 +8,14 @@ export interface TransferPayload {
 }
 
 export const uniqueUsername = (): string => {
-  return `user_${Date.now()}`;
+  // Date.now().toString(36) → ~8 chars (vs 13 decimal digits), leaving room for a
+  // 3-char random suffix while keeping the total well under any form maxlength.
+  // The random suffix prevents collisions when workers start at the same millisecond.
+  return `user_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 };
 
 export const uniquePassword = (): string => {
-  return `pass_${Date.now()}`;
+  return `pass_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 };
 
 export const buildRegistrationData = (): RegistrationData => {

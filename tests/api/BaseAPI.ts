@@ -41,7 +41,7 @@ export class BaseAPI {
 
   constructor(request: APIRequestContext) {
     this.request = request;
-    this.baseUrl = `${process.env.API_BASE_URL}/services/bank`;
+    this.baseUrl = `${(process.env.API_BASE_URL ?? '').replace(/\/$/, '')}/services/bank`;
   }
 
   protected async get<T>(path: string): Promise<T> {
