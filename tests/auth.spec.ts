@@ -10,7 +10,7 @@ test.use({ storageState: { cookies: [], origins: [] } });
 test.describe('Authentication', () => {
   test('Login > valid credentials land on account overview', async ({
     loginPage,
-    registeredUser
+    registeredUser,
   }) => {
     await loginPage.login(registeredUser.username, registeredUser.password);
     await loginPage.expectOverview();
@@ -27,4 +27,12 @@ test.describe('Authentication', () => {
     await loginPage.navigateTo('overview.htm');
     await expect(loginPage.getByRole('heading', { name: 'Error!' })).toBeVisible();
   });
+
+  test('Login via API > customer id is received', async ({
+    api,
+    registeredUser,
+  }) => {
+    const customerId: number = await api.login(registeredUser.username, registeredUser.password);
+    expect(customerId === registeredUser.customerId);
+  })
 });
