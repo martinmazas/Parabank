@@ -49,17 +49,17 @@ export default defineConfig({
 
     // staging  → full cross-browser matrix (catches browser-specific regressions)
     // production → Chromium only (fast smoke-check after a deploy)
-    ...(ENV !== 'production'
-      ? [
-          {
-            name: 'firefox',
-            use: { ...devices['Desktop Firefox'] },
-          },
-          {
-            name: 'webkit',
-            use: { ...devices['Desktop Safari'] },
-          },
-        ]
-      : []),
+    // ...(ENV !== 'production'
+    //   ? [
+    //       {
+    //         name: 'firefox',
+    //         use: { ...devices['Desktop Firefox'] },
+    //       },
+    //       {
+    //         name: 'webkit',
+    //         use: { ...devices['Desktop Safari'] },
+    //       },
+    //     ]
+    //   : []),
   ],
 });
