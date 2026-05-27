@@ -72,3 +72,42 @@ Evidence (manual probe on 2026-05-20)
 Account 13677 (from), account 13788 (to), amount=-50.
 POST  →  200 OK
 13677 balance went UP by $50; 13788 balance went DOWN by $50.
+
+================================================================================
+BUG-003: Registration creates account with $515 balance but no transaction record
+================================================================================
+Severity : Low
+Endpoint : GET /services/bank/accounts/{id}/transactions
+Test     : GET /accounts/{id}/transactions > response matches Transaction interface shape
+
+Description
+-----------
+When a new customer registers, Parabank creates a default CHECKING account
+seeded with a $515 balance. However, no transaction is recorded for this
+initial deposit. Calling GET /accounts/{id}/transactions on this account
+immediately after registration returns an empty array ([]), even though
+the account clearly holds funds.
+
+Steps to reproduce
+------------------
+1. Register a new user via the UI.
+2. Retrieve the customer's accounts: GET /services/bank/customers/{id}/accounts
+3. Note accounts[0].balance = 515.
+4. GET /services/bank/accounts/{accounts[0].id}/transactions
+5. Observe: response is [] (empty array).
+
+Expected behavior
+-----------------
+An "Initial deposit" transaction entry should exist explaining the $515 balance.
+The response should contain at least one Transaction object.
+
+Actual behavior
+---------------
+Empty array returned. The $515 balance has no traceable origin in the
+transaction history.
+
+Evidence
+--------
+Discovered via test execution on 2026-05-27.
+Any account used only for the initial balance (no transfers in or out)
+returns an empty transaction list.
