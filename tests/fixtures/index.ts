@@ -72,7 +72,6 @@ export const test = base.extend<MyFixtures, WorkerFixtures>({
       let customerId: number | undefined;
 
       for (let attempt = 1; attempt <= 3; attempt++) {
-        // Register via UI (the REST /services/bank/register endpoint returns 404)
         const ctx = await browser.newContext({ baseURL: process.env.BASE_URL });
         const pg = await ctx.newPage();
         await pg.goto('register.htm');

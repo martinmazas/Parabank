@@ -3,7 +3,6 @@ import { BasePage } from './BasePage';
 
 export class LoginPage extends BasePage {
   async login(username: string, password: string): Promise<void> {
-    await this.page.context().clearCookies();
     await this.navigateTo('index.htm');
     await this.page.locator('input[name="username"]').fill(username);
     await this.page.locator('input[name="password"]').fill(password);
