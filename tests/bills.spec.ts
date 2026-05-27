@@ -19,16 +19,18 @@ test.describe('Bills', () => {
     api,
   }) => {
     const accounts = await api.getAccounts(registeredUser.customerId);
-    const validAccount = accounts.find((a) => a.balance >= 50);
-    if (!validAccount) throw new Error('No account with sufficient balance found');
+    // Create a dedicated account with a fresh opening deposit so this test is
+    // not affected by balance changes made by other tests on the same worker.
+    // Parabank always seeds the new account with ~$100, which is reliably > $50.
+    const paymentAccount = await api.openNewAccount(registeredUser.customerId, '0', accounts[0].id);
 
     await loginPage.ensureLoggedIn(registeredUser.username, registeredUser.password, 'billpay.htm');
     await billPayPage.expectHeading('Bill Payment Service');
 
-    await billPayPage.pay(PAYEE, '50', String(validAccount.id));
+    await billPayPage.pay(PAYEE, '50', String(paymentAccount.id));
     await billPayPage.expectSuccess();
 
-    await billPayPage.goto(`activity.htm?id=${validAccount.id}`);
+    await billPayPage.goto(`activity.htm?id=${paymentAccount.id}`);
     await expect(billPayPage.locator('table#transactionTable')).toBeVisible();
     await expect(billPayPage.locator('table#transactionTable tbody tr')).not.toHaveCount(0);
   });
@@ -41,14 +43,13 @@ test.describe('Bills', () => {
   }) => {
     // Open a dedicated account so concurrent tests can't add transactions to it
     // and pollute the before/after count comparison.
+    // No balance check needed on accounts[0]: validation fires (payee name is
+    // empty) before Parabank ever checks the account balance.
     const accounts = await api.getAccounts(registeredUser.customerId);
-    const sourceAccount = accounts.find((a) => a.balance >= 50);
-    if (!sourceAccount) throw new Error('No account with sufficient balance found');
-
     const isolatedAccount = await api.openNewAccount(
       registeredUser.customerId,
       '0',
-      sourceAccount.id,
+      accounts[0].id,
     );
 
     const txBefore = await api.getTransactions(isolatedAccount.id);

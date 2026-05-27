@@ -77,9 +77,14 @@ test.describe('Transfers', () => {
     api,
   }) => {
     const accounts = await api.getAccounts(registeredUser.customerId);
-    const accountId = accounts[0].id;
+    // Use a freshly opened account instead of accounts[0].
+    // Parabank seeds accounts[0] with $515 but records no transaction for it,
+    // so getTransactions returns [] when this test runs before any transfer has
+    // occurred. Opening a new account guarantees at least one transaction
+    // (the opening deposit) regardless of execution order.
+    const freshAccount = await api.openNewAccount(registeredUser.customerId, '0', accounts[0].id);
 
-    const transactions = await api.getTransactions(accountId);
+    const transactions = await api.getTransactions(freshAccount.id);
     expect(Array.isArray(transactions)).toBe(true);
     expect(transactions.length).toBeGreaterThan(0);
 
