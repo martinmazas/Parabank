@@ -83,45 +83,45 @@ test.describe('Accounts', () => {
     await expect.poll(() => api.getBalance(toId)).toBe(round(toBalance + amount));
   });
 
-  // test('Transfer > amount exceeding balance > error response and balances unchanged', async ({
-  //   registeredUser,
-  //   api,
-  //   request,
-  // }) => {
-  //   const { fromId, toId, fromBalance, toBalance } = await setupTransferPair(
-  //     api,
-  //     registeredUser.customerId,
-  //     { requirePositiveBalance: true },
-  //   );
+  test.skip('Transfer > amount exceeding balance > error response and balances unchanged', async ({
+    registeredUser,
+    api,
+    request,
+  }) => {
+    const { fromId, toId, fromBalance, toBalance } = await setupTransferPair(
+      api,
+      registeredUser.customerId,
+      { requirePositiveBalance: true },
+    );
 
-  //   const res = await request.post(`${process.env.API_BASE_URL}/services/bank/transfer`, {
-  //     params: { fromAccountId: fromId, toAccountId: toId, amount: fromBalance * 2 },
-  //     headers: { Accept: 'application/json' },
-  //   });
+    const res = await request.post(`${process.env.API_BASE_URL}/services/bank/transfer`, {
+      params: { fromAccountId: fromId, toAccountId: toId, amount: fromBalance * 2 },
+      headers: { Accept: 'application/json' },
+    });
 
-  //   expect(res.status()).toBeGreaterThanOrEqual(400);
-  //   expect(await api.getBalance(fromId)).toBe(fromBalance);
-  //   expect(await api.getBalance(toId)).toBe(toBalance);
-  // });
+    expect(res.status()).toBeGreaterThanOrEqual(400);
+    expect(await api.getBalance(fromId)).toBe(fromBalance);
+    expect(await api.getBalance(toId)).toBe(toBalance);
+  });
 
-  // test('Transfer > negative amount > API returns 4xx and no transaction created', async ({
-  //   registeredUser,
-  //   api,
-  //   request,
-  // }) => {
-  //   const { fromId, toId, fromBalance } = await setupTransferPair(api, registeredUser.customerId);
-  //   const txBefore = await api.getTransactions(fromId);
+  test.skip('Transfer > negative amount > API returns 4xx and no transaction created', async ({
+    registeredUser,
+    api,
+    request,
+  }) => {
+    const { fromId, toId, fromBalance } = await setupTransferPair(api, registeredUser.customerId);
+    const txBefore = await api.getTransactions(fromId);
 
-  //   const res = await request.post(`${process.env.API_BASE_URL}/services/bank/transfer`, {
-  //     params: { fromAccountId: fromId, toAccountId: toId, amount: -100 },
-  //     headers: { Accept: 'application/json' },
-  //   });
+    const res = await request.post(`${process.env.API_BASE_URL}/services/bank/transfer`, {
+      params: { fromAccountId: fromId, toAccountId: toId, amount: -100 },
+      headers: { Accept: 'application/json' },
+    });
 
-  //   expect(res.status()).toBeGreaterThanOrEqual(400);
-  //   expect(await api.getBalance(fromId)).toBe(fromBalance);
-  //   const txAfter = await api.getTransactions(fromId);
-  //   expect(txAfter).toHaveLength(txBefore.length);
-  // });
+    expect(res.status()).toBeGreaterThanOrEqual(400);
+    expect(await api.getBalance(fromId)).toBe(fromBalance);
+    const txAfter = await api.getTransactions(fromId);
+    expect(txAfter).toHaveLength(txBefore.length);
+  });
 
   test('Open Savings account > New account appears in GET /accounts with correct type', async ({
     registeredUser,
