@@ -1,15 +1,5 @@
 import { test, expect } from './fixtures/index';
-import { PayeeData } from './pages/BillPayPage';
-
-const PAYEE: PayeeData = {
-  name: 'Electric Company',
-  street: '100 Power Lane',
-  city: 'Springfield',
-  state: 'IL',
-  zipCode: '62701',
-  phone: '5559876543',
-  accountNumber: '12345',
-};
+import { PAYEE } from './helpers/testData';
 
 test.describe('Bills', () => {
   test('Payment > Pay a bill with valid payee and amount > Success confirmation visible and transaction in history', async ({

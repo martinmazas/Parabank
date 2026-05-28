@@ -1,4 +1,5 @@
 import { APIRequestContext } from '@playwright/test';
+import { PayeeData } from '../pages/BillPayPage';
 
 export interface Customer {
   id: number;
@@ -11,6 +12,12 @@ export interface Account {
   customerId: number;
   type: string;
   balance: number;
+}
+
+export interface BillPayResult {
+  accountId: number;
+  amount: number;
+  payeeName: string;
 }
 
 export interface Transaction {
@@ -101,4 +108,26 @@ export class BaseAPI {
     return res.text();
   }
 
+  async billPay(fromId: number, payee: PayeeData, amount: number): Promise<BillPayResult> {
+    const res = await this.request.post(`${this.baseUrl}/billpay`, {
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      params: { accountId: fromId, amount },
+      data: {
+        name: payee.name,
+        address: {
+          street: payee.street,
+          city: payee.city,
+          state: payee.state,
+          zipCode: payee.zipCode,
+        },
+        phoneNumber: payee.phone,
+        accountNumber: 0,
+      },
+    });
+    if (!res.ok()) {
+      throw new Error(`POST /billpay failed: ${res.status()} ${await res.text()}`);
+    }
+
+    return res.json() as Promise<BillPayResult>;
+  }
 }

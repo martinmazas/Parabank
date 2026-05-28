@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures/index';
+import { PAYEE } from './helpers/testData';
 
 test.describe('API calls', () => {
     test('Login via API > customer id is received', async ({
@@ -68,5 +69,18 @@ test.describe('API calls', () => {
         console.log(transferResult);
         const response: string = `Successfully transferred $100 from account #${fromAccountId} to account #${fromAccountId}`;
         expect(transferResult).toBe(response);
+    });
+
+    test('Bill Pay > Pay bill from account to another with amount and payee body > Bill pay result', async ({
+        api,
+        registeredUser,
+    }) => {
+        const accounts = await api.getAccounts(registeredUser.customerId);
+        const fromAccountId = accounts[0].id;
+
+        const billPayResult = await api.billPay(fromAccountId, PAYEE, 50);
+        expect(billPayResult['accountId']).toBe(fromAccountId);
+        expect(billPayResult['amount']).toBe(50);
+        expect(billPayResult['payeeName']).toBe(PAYEE.name);
     });
 });

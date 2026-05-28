@@ -1,5 +1,7 @@
 import { RegistrationData } from '../api/BaseAPI';
+import { PayeeData } from '../pages/BillPayPage';
 export type { RegistrationData };
+export type { PayeeData };
 
 export interface TransferPayload {
   amount: number;
@@ -33,6 +35,16 @@ export const buildRegistrationData = (): RegistrationData => {
     username,
     password,
   };
+};
+
+export const PAYEE: PayeeData = {
+  name: 'Electric Company',
+  street: '100 Power Lane',
+  city: 'Springfield',
+  state: 'IL',
+  zipCode: '62701',
+  phone: '5559876543',
+  accountNumber: '12345',
 };
 
 const TRANSFER_DEFAULTS: TransferPayload = { fromId: 0, toId: 0, amount: 100 };
