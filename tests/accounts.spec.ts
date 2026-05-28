@@ -4,18 +4,13 @@ import { Account, BaseAPI } from './api/BaseAPI';
 async function setupTransferPair(
   api: BaseAPI,
   customerId: number,
-  options: { requirePositiveBalance?: boolean } = {},
-): Promise<{ fromId: number; toId: number; fromBalance: number; toBalance: number }> {
+): Promise<{ fromId: number; toId: number }> {
   const accounts = await api.getAccounts(customerId);
-  const from = options.requirePositiveBalance ? accounts.find((a) => a.balance > 0) : accounts[0];
-  if (!from) throw new Error('No suitable source account found');
-  const toAccount = await api.openNewAccount(customerId, '0', from.id);
-  return {
-    fromId: from.id,
-    toId: toAccount.id,
-    fromBalance: await api.getBalance(from.id),
-    toBalance: await api.getBalance(toAccount.id),
-  };
+  // Open two fresh accounts funded from accounts[0] so each test gets an
+  // isolated pair that no other concurrent worker can touch.
+  const fromAccount = await api.openNewAccount(customerId, '0', accounts[0].id);
+  const toAccount = await api.openNewAccount(customerId, '0', accounts[0].id);
+  return { fromId: fromAccount.id, toId: toAccount.id };
 }
 
 test.describe('Accounts', () => {
@@ -88,11 +83,9 @@ test.describe('Accounts', () => {
     api,
     request,
   }) => {
-    const { fromId, toId, fromBalance, toBalance } = await setupTransferPair(
-      api,
-      registeredUser.customerId,
-      { requirePositiveBalance: true },
-    );
+    const { fromId, toId } = await setupTransferPair(api, registeredUser.customerId);
+    const fromBalance = await api.getBalance(fromId);
+    const toBalance = await api.getBalance(toId);
 
     const res = await request.post(`${process.env.API_BASE_URL}/services/bank/transfer`, {
       params: { fromAccountId: fromId, toAccountId: toId, amount: fromBalance * 2 },
@@ -109,7 +102,8 @@ test.describe('Accounts', () => {
     api,
     request,
   }) => {
-    const { fromId, toId, fromBalance } = await setupTransferPair(api, registeredUser.customerId);
+    const { fromId, toId } = await setupTransferPair(api, registeredUser.customerId);
+    const fromBalance = await api.getBalance(fromId);
     const txBefore = await api.getTransactions(fromId);
 
     const res = await request.post(`${process.env.API_BASE_URL}/services/bank/transfer`, {

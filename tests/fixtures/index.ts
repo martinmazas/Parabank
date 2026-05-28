@@ -52,11 +52,11 @@ export const test = base.extend<MyFixtures, WorkerFixtures>({
     await use(new BaseAPI(request));
   },
 
-  // ── Per-worker isolation ─────────────────────────────────────────────────────
-  // Registers a brand-new user once per Playwright worker and captures their
-  // authenticated browser session. Tests on the same worker share this single
-  // user (zero repeated logins within a worker); tests on different workers get
-  // completely separate users and separate bank accounts (no shared state).
+  // ── Persistent shared user ────────────────────────────────────────────────────
+  // All workers share one user, persisted in .auth/persistent-user.json between
+  // runs. On startup, the fixture validates the saved credentials via API login;
+  // if they are no longer valid it registers a new user and overwrites the file.
+  // Each worker still gets its own browser session file for isolation.
   //
   // Specs that explicitly clear the session with
   //   test.use({ storageState: { cookies: [], origins: [] } })
@@ -67,61 +67,107 @@ export const test = base.extend<MyFixtures, WorkerFixtures>({
       const AUTH_DIR = path.resolve(process.cwd(), '.auth');
       fs.mkdirSync(AUTH_DIR, { recursive: true });
       const storageStatePath = path.join(AUTH_DIR, `worker-${workerInfo.workerIndex}.json`);
+      const PERSISTENT_USER_FILE = path.join(AUTH_DIR, 'persistent-user.json');
 
-      let data = buildRegistrationData();
-      let customerId: number | undefined;
+      type SavedUser = { username: string; password: string; customerId: number };
 
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        const ctx = await browser.newContext({ baseURL: process.env.BASE_URL });
-        const pg = await ctx.newPage();
-        await pg.goto('register.htm');
-        await pg.locator('[id="customer.firstName"]').fill(data.firstName);
-        await pg.locator('[id="customer.lastName"]').fill(data.lastName);
-        await pg.locator('[id="customer.address.street"]').fill(data.address);
-        await pg.locator('[id="customer.address.city"]').fill(data.city);
-        await pg.locator('[id="customer.address.state"]').fill(data.state);
-        await pg.locator('[id="customer.address.zipCode"]').fill(data.zipCode);
-        await pg.locator('[id="customer.phoneNumber"]').fill(data.phoneNumber);
-        await pg.locator('[id="customer.ssn"]').fill(data.ssn);
-        await pg.locator('[id="customer.username"]').fill(data.username);
-        await pg.locator('[id="customer.password"]').fill(data.password);
-        await pg.locator('[id="repeatedPassword"]').fill(data.password);
-        await pg.getByRole('button', { name: 'Register' }).click();
-        await pg.waitForLoadState('networkidle');
-
-        // If the username field is still visible, Parabank kept the form open — registration failed.
-        // Generate fresh credentials and retry rather than proceeding with a non-existent user.
-        const registrationFailed = await pg.locator('[id="customer.username"]').isVisible();
-        if (registrationFailed) {
-          await ctx.close();
-          data = buildRegistrationData();
-          continue;
-        }
-
-        // Parabank auto-logs-in after registration — capture the live session now.
-        await ctx.storageState({ path: storageStatePath });
-        await ctx.close();
-
-        // Resolve customerId via API. Wrap in try/catch: in rare cases the DB
-        // write may not have fully committed yet, causing a 400 on immediate login.
+      // Try to load and validate the persisted user via API.
+      let persistedUser: SavedUser | null = null;
+      if (fs.existsSync(PERSISTENT_USER_FILE)) {
         try {
+          const raw = JSON.parse(fs.readFileSync(PERSISTENT_USER_FILE, 'utf-8')) as SavedUser;
           const apiCtx = await playwrightRequest.newContext();
           const api = new BaseAPI(apiCtx);
-          customerId = await login(api, data.username, data.password);
+          const customerId = await login(api, raw.username, raw.password);
           await apiCtx.dispose();
-          break;
+          persistedUser = { username: raw.username, password: raw.password, customerId };
         } catch {
-          data = buildRegistrationData();
+          persistedUser = null;
         }
       }
 
-      if (customerId === undefined) {
-        throw new Error(`Worker ${workerInfo.workerIndex}: registration failed after 3 attempts`);
+      let username: string;
+      let password: string;
+      let customerId: number;
+
+      if (persistedUser) {
+        // Reuse saved user — just create a fresh browser session via login.
+        username = persistedUser.username;
+        password = persistedUser.password;
+        customerId = persistedUser.customerId;
+
+        const ctx = await browser.newContext({ baseURL: process.env.BASE_URL });
+        const pg = await ctx.newPage();
+        await pg.goto('index.htm');
+        await pg.locator('input[name="username"]').fill(username);
+        await pg.locator('input[name="password"]').fill(password);
+        await pg.getByRole('button', { name: 'Log In' }).click();
+        await pg.waitForLoadState('networkidle');
+        await ctx.storageState({ path: storageStatePath });
+        await ctx.close();
+      } else {
+        // No valid saved user — register a new one and persist it.
+        let data = buildRegistrationData();
+        let resolvedCustomerId: number | undefined;
+
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          const ctx = await browser.newContext({ baseURL: process.env.BASE_URL });
+          const pg = await ctx.newPage();
+          await pg.goto('register.htm');
+          await pg.locator('[id="customer.firstName"]').fill(data.firstName);
+          await pg.locator('[id="customer.lastName"]').fill(data.lastName);
+          await pg.locator('[id="customer.address.street"]').fill(data.address);
+          await pg.locator('[id="customer.address.city"]').fill(data.city);
+          await pg.locator('[id="customer.address.state"]').fill(data.state);
+          await pg.locator('[id="customer.address.zipCode"]').fill(data.zipCode);
+          await pg.locator('[id="customer.phoneNumber"]').fill(data.phoneNumber);
+          await pg.locator('[id="customer.ssn"]').fill(data.ssn);
+          await pg.locator('[id="customer.username"]').fill(data.username);
+          await pg.locator('[id="customer.password"]').fill(data.password);
+          await pg.locator('[id="repeatedPassword"]').fill(data.password);
+          await pg.getByRole('button', { name: 'Register' }).click();
+          await pg.waitForLoadState('networkidle');
+
+          // If the username field is still visible, registration failed — retry with fresh credentials.
+          const registrationFailed = await pg.locator('[id="customer.username"]').isVisible();
+          if (registrationFailed) {
+            await ctx.close();
+            data = buildRegistrationData();
+            continue;
+          }
+
+          // Parabank auto-logs-in after registration — capture the live session now.
+          await ctx.storageState({ path: storageStatePath });
+          await ctx.close();
+
+          // Resolve customerId via API. Wrap in try/catch: in rare cases the DB
+          // write may not have fully committed yet, causing a 400 on immediate login.
+          try {
+            const apiCtx = await playwrightRequest.newContext();
+            const api = new BaseAPI(apiCtx);
+            resolvedCustomerId = await login(api, data.username, data.password);
+            await apiCtx.dispose();
+            break;
+          } catch {
+            data = buildRegistrationData();
+          }
+        }
+
+        if (resolvedCustomerId === undefined) {
+          throw new Error(`Worker ${workerInfo.workerIndex}: registration failed after 3 attempts`);
+        }
+
+        username = data.username;
+        password = data.password;
+        customerId = resolvedCustomerId;
+
+        // Persist the new user so future runs can reuse it.
+        fs.writeFileSync(PERSISTENT_USER_FILE, JSON.stringify({ username, password, customerId }, null, 2));
       }
 
-      await use({ username: data.username, password: data.password, customerId, storageStatePath });
+      await use({ username, password, customerId, storageStatePath });
 
-      // Remove the session file once all tests on this worker have finished
+      // Remove the per-worker session file once all tests on this worker have finished.
       try { fs.unlinkSync(storageStatePath); } catch { /* ignore */ }
     },
     { scope: 'worker' },
