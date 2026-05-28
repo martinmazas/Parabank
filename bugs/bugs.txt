@@ -111,3 +111,46 @@ Evidence
 Discovered via test execution on 2026-05-27.
 Any account used only for the initial balance (no transfers in or out)
 returns an empty transaction list.
+
+================================================================================
+BUG-004: POST /createAccount response returns balance 0 instead of actual balance
+================================================================================
+Severity : Medium
+Endpoint : POST /services/bank/createAccount
+Test     : N/A (observed during test setup — api.openNewAccount)
+
+Description
+-----------
+When a new account is created via the API, the JSON response body contains
+"balance": 0.  In reality, Parabank seeds every new account with a $100
+opening deposit, which is correctly reflected in the UI and in a subsequent
+GET /accounts/{id} call.  Tests that rely on the response balance (e.g. to
+decide whether a payment can be made) will therefore read the wrong value.
+
+Steps to reproduce
+------------------
+1. POST /services/bank/createAccount?customerId=<id>&newAccountType=0&fromAccountId=<id>
+2. Inspect the JSON response body — "balance" field is 0.
+3. Open the app in the UI or call GET /services/bank/accounts/{newId}
+4. Observe: balance is $100.
+
+Expected behavior
+-----------------
+The response body should reflect the actual post-creation balance ($100),
+or at minimum match what GET /accounts/{id} returns immediately after creation.
+
+Actual behavior
+---------------
+Response body always contains "balance": 0 regardless of the opening deposit.
+A separate GET request is required to read the real balance.
+
+Workaround
+----------
+Do not use the balance from the POST /createAccount response.
+Always fetch the account via GET /accounts/{id} when the actual balance is needed.
+
+Evidence
+--------
+Discovered on 2026-05-27 during test development.
+POST response  →  { ..., "balance": 0 }
+GET /accounts/{newId}  →  { ..., "balance": 100.00 }

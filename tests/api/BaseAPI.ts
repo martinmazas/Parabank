@@ -87,7 +87,7 @@ export class BaseAPI {
     return this.get<Transaction[]>(`/accounts/${accountId}/transactions`);
   }
 
-  async transfer(fromId: number, toId: number, amount: number): Promise<void> {
+  async transfer(fromId: number, toId: number, amount: number): Promise<string> {
     // The /transfer endpoint returns plain text ("Successfully transferred...") despite
     // advertising Content-Type: application/json — skip res.json() to avoid a parse error.
     const res = await this.request.post(`${this.baseUrl}/transfer`, {
@@ -97,6 +97,8 @@ export class BaseAPI {
     if (!res.ok()) {
       throw new Error(`POST /transfer failed: ${res.status()} ${await res.text()}`);
     }
+
+    return res.text();
   }
 
 }

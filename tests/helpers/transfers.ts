@@ -5,7 +5,7 @@ export const transfer = async (
   fromId: number,
   toId: number,
   amount: number,
-): Promise<void> => {
+): Promise<string> => {
   return api.transfer(fromId, toId, amount);
 };
 

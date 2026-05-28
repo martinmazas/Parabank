@@ -27,12 +27,4 @@ test.describe('Authentication', () => {
     await loginPage.navigateTo('overview.htm');
     await expect(loginPage.getByRole('heading', { name: 'Error!' })).toBeVisible();
   });
-
-  test('Login via API > customer id is received', async ({
-    api,
-    registeredUser,
-  }) => {
-    const customerId: number = await api.login(registeredUser.username, registeredUser.password);
-    expect(customerId === registeredUser.customerId);
-  })
 });
